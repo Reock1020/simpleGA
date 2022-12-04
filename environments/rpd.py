@@ -5,18 +5,16 @@ class RPD(object):
     def __init__(self,episode_size):
         self.episode_size=episode_size
         self.episode_counter = 0
-        self.c_c = 5
+        self.c_c = 9 #協力協力
         self.c_b = 0
         self.b_c = 10
-        self.b_b = 3
+        self.b_b = 1
 
         self.s_total_reward = 0
         self.o_total_reward = 0
 
         self.str = ["裏切り","協力"]
 
-
-        
     def step(self,s_action,o_action):
         l = len(s_action)
         s_reward_total = 0
