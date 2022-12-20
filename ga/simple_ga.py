@@ -10,10 +10,12 @@ from environments import RPD
 from scipy.spatial import distance
 
 class SimpleGA:
-    def __init__(self):
-        self.N = 50
-        self.ITERATION  = 15
-        self.pos_plt_cnt =2
+    def __init__(self,N):
+        self.N = N
+        self.ITERATION  = 100
+        self.repeat_switch = True
+        self.pos_plt_cnt =1
+        self.pos_plt_switch = False
         self._initialize()
         self.env = RPD(self.ITERATION)
         self.total_number = sum(range(1,self.N+1))
@@ -25,12 +27,21 @@ class SimpleGA:
         self.a_similarity_sum = 0
         self.n_similarity_sum = 0
 
+        self.s_similarity_avg = 0
+        self.a_similarity_avg = 0
+
+        self.a_similarity_list_1 = []
+        self.s_similarity_list_2 = []
+        self.similarity_difference_list = []
+        self.dispersion_rate_list = []
+
+        self.character_range_difference = 0
+
+        self.pre_pool = self.pool
+        self.a = 0
+
     def _initialize(self):
         self.pool = [RuleAgent(None,None) for i in range(self.N)] #個体生成
-
-    def _mutateAll(self):
-        for i in range(self.N):
-            self.pool[i].mutate()
     
     def _rankingSelection(self):
         pool_next = [] #次世代
@@ -203,9 +214,10 @@ class SimpleGA:
 
     def _rankingSelectionAtDistance2(self):
         pool_next = [] #次世代
+        self.pre_pool = self.pool
         agent_rewards = [0]*self.N
         agent_fitness = [[0 for i in range(2)]for j in range(self.N)]
-        for i in range(0,self.N):#距離が10以下のエージェントとRPD
+        for i in range(0,self.N):
             cnt = 1
             min = 100000
             near_number = 0
@@ -236,12 +248,70 @@ class SimpleGA:
         agent_fitness.sort(key=lambda x: x[0])
 
         self._printStatus(self.epi)
-        if self.epi%self.pos_plt_cnt==0:
-            self.pos_plt(self.pool)
+        # if self.epi%self.pos_plt_cnt==0: self.pos_plt(self.pool)
+
+        # if self.pos_plt_switch:
+        #     self.pos_plt(self.pool)
 
         n = self.N-1
 
-        while len(pool_next) < self.N*0.8:#任意の数の上位を選択
+        while len(pool_next) < self.N*0.7:#任意の数の上位を選択
+            number = agent_fitness[n][1]
+            offspring = copy.deepcopy(self.pool[number])
+            offspring.pos_update()
+            pool_next.append(offspring)
+            n=n-1
+        self.pool = pool_next[:]
+        n = 0
+        while len(pool_next) < self.N:#選択した上位を交叉
+            rdm = random.random()
+            min = 100000
+            for i in range(len(self.pool)):
+                agent_distance = np.linalg.norm(self.pool[n].pos-self.pool[i].pos)
+                if agent_distance < min and n != i:
+                    min = agent_distance
+                    number = i
+            offspring1 = copy.deepcopy(self.pool[number])
+            offspring2 = copy.deepcopy(self.pool[n])
+            n+=1
+            new_agent = self.intersection2(offspring1,offspring2)
+            pool_next.append(new_agent)
+        self.pool = pool_next[:]
+        
+
+    def _rankingSelectionAtDistance3(self):
+        pool_next = [] #次世代
+        agent_rewards = [0]*self.N
+        agent_fitness = [[0 for i in range(2)]for j in range(self.N)]
+        for i in range(0,self.N):
+            cnt = 1
+            min = 100000
+            near_number = 0
+            for j in range(0,self.N):#総当たり戦
+                agent_distance = np.linalg.norm(self.pool[i].pos-self.pool[j].pos)
+                if i!=j and agent_distance < 10:
+                    o1_action = self.pool[i].action()
+                    o2_action = self.pool[j].action()
+                    rewards = self.env.step(o1_action,o2_action)
+                    agent_rewards[i] += rewards[0]
+                    cnt += 1
+            agent_rewards[i] = agent_rewards[i]/cnt
+
+        for i in range(self.N):
+            agent_fitness[i][1] = i
+            agent_fitness[i][0] = self.pool[i].getFitness(agent_rewards[i])
+        agent_fitness.sort(key=lambda x: x[0])
+
+        self._printStatus(self.epi)
+        # if self.epi%self.pos_plt_cnt==0:
+        #     self.pos_plt(self.pool)
+
+        # if self.pos_plt_switch:
+        #     self.pos_plt(self.pool)
+
+        n = self.N-1
+
+        while len(pool_next) < self.N*0.7:#任意の数の上位を選択
             number = agent_fitness[n][1]
             offspring = copy.deepcopy(self.pool[number])
             offspring.pos_update()
@@ -302,7 +372,19 @@ class SimpleGA:
         sum = 0
         for i in range(len(affiliation_pool)):
             sum += distance.hamming(c.look_gene,affiliation_pool[i].look_gene)*len(c.look_gene)
-        sum = sum/(len(affiliation_pool)-1)
+        if len(affiliation_pool)!=1:
+            sum = sum/(len(affiliation_pool)-1)
+        else:
+            sum = sum/len(affiliation_pool)
+        return sum
+    
+    def calc_hamming_distance_average2(self,affiliation_pool,c):
+        sum = 0
+        for i in range(len(affiliation_pool)):
+            sum += distance.hamming(c.look_gene,affiliation_pool[i].look_gene)*len(c.look_gene)
+        
+        sum = sum/(len(affiliation_pool))
+        
         return sum
 
     def _printStatus(self, iteration):
@@ -315,21 +397,62 @@ class SimpleGA:
 
         for i in range(self.N):
             new_pool.append(self.pool[agent_pos[i][1]])
-        print("generation : " +str(iteration)+"\tばらつき:"+str(self.calc_dispersion_rate(new_pool)))
+        dispersion_rate = self.calc_dispersion_rate(new_pool)
+        self.pos_plt_switch = False
+        if dispersion_rate < 10:
+            self.pos_plt_switch = True
+        if dispersion_rate == 0:
+            self.repeat_switch = False
+        self.dispersion_rate_list.append(dispersion_rate)
+
+        if dispersion_rate == 0:
+            return 
+
+        self.pool = new_pool
+        # print("generation : " +str(iteration)+"\tばらつき:"+str(dispersion_rate))
         self.pool_allocation(new_pool)
+        
 
         for c in new_pool:
-            print("\t"+str(c)+"\t  similarity : "+str(self.calc_similarity(c)))
+            similarity = self.calc_similarity(c)
+            # print("\t"+str(c)+"\t  similarity : "+str(similarity))
 
         s_similarity_avg,a_similarity_avg,n_similarity_avg = self.calc_similarity_avg()
-        print("利己的similarity : "+str(s_similarity_avg),"利他的similarity : "+str(a_similarity_avg))
-    
+        self.s_similarity_avg = s_similarity_avg
+        self.s_similarity_list_2.append(self.s_similarity_avg)
+        self.a_similarity_avg = a_similarity_avg
+        self.a_similarity_list_1.append(self.a_similarity_avg)
+        # print("利己的similarity : "+str(s_similarity_avg),"利他的similarity : "+str(a_similarity_avg))
+        self.character_range_difference = self.calc_character_range_difference()
+        self.similarity_difference_list.append(self.character_range_difference)
+
+        # print("性格の距離 : "+str(self.character_range_difference))
+
+    def calc_character_range_difference(self):
+        sum = 0
+        for i in range(len(self.a_pool)):
+            sum += self.calc_hamming_distance_average2(self.s_pool,self.a_pool[i])
+        avg = sum/len(self.a_pool)
+        return avg
+
+        
     def calc_similarity_avg(self):
         s_similarity_avg = self.s_similarity_sum/len(self.s_pool)
         self.s_similarity_sum = 0
         a_similarity_avg = self.a_similarity_sum/len(self.a_pool)
         self.a_similarity_sum = 0
         return s_similarity_avg,a_similarity_avg,0
+
+    def sim_plt(self,episode_list):
+
+        fig, ax1 = plt.subplots(figsize=(10,8))
+        ax1.bar(episode_list,self.dispersion_rate_list, align="center", color="royalblue", linewidth=0)
+        ax2 = plt.twinx()
+        ax2.plot(episode_list,self.s_similarity_list_2,linewidth=4,c="red",label = 'selfish')
+        ax2.plot(episode_list,self.a_similarity_list_1,linewidth=4,c="blue",label='altruistic')
+        ax2.plot(episode_list,self.similarity_difference_list,linewidth=4,c="green",label='difference')
+        plt.legend()
+        plt.show()
 
     def pos_plt(self,pool):
         x_pos_list0 = []
@@ -358,11 +481,30 @@ class SimpleGA:
         plt.legend()
         plt.show()
 
-
+    def _mutateAll(self):
+        for i in range(self.N):
+            self.pool[i].mutate2()
 
     
     def evolve(self):
+        episode_list = []
+        max = 0
         for i in range(self.ITERATION):
-            self.epi = i
+            # for j in range(self.N): self.pool[j].step()
+            episode_list.append(i)
             self._rankingSelectionAtDistance2()
             self._mutateAll()
+            if self.dispersion_rate_list[i] == 0:
+                self.dispersion_rate_list.pop(i)
+                episode_list.pop(i)
+                break
+            self.epi+=1
+            sa = self.similarity_difference_list[i]-self.a_similarity_list_1[i]-self.s_similarity_list_2[i]
+            if i == 0:max = sa
+            if max <= sa:
+                max = sa
+                evaluation_pool= copy.deepcopy(self.pre_pool)
+                self.a = i
+        # self.sim_plt(episode_list)
+        return max,evaluation_pool
+        

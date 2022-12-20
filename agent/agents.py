@@ -6,7 +6,7 @@ import random
 class RuleAgent(object):
     def __init__(self,new_gene,parent_pos):
         self.LENGTH = 14 #遺伝子数
-        self.MUTATION_RATE = 0 #突然変異
+        self.MUTATION_RATE = 0.0005 #突然変異
 
         # if i < N: #利己的か利他的か
         #     self.doctrine = 1 #利他的
@@ -33,6 +33,7 @@ class RuleAgent(object):
             self.look_gene.append(self.gene[i])
         
         self.character = sum(self.action_gene)/len(self.action_gene)
+        self.character_val = [int(self.character>=0.5)]
 
 
     def action(self):
@@ -42,6 +43,11 @@ class RuleAgent(object):
     def B_to_A(self):
         self_belief = self.action_gene
         return self_belief
+
+    def mutate2(self):
+        for i in range(len(self.action_gene)):
+            if random.random() < self.MUTATION_RATE:
+                self.gene[i] = 1-self.gene[i]
 
     def mutate(self):
         if random.random() < self.MUTATION_RATE:
@@ -96,3 +102,12 @@ class RuleAgent(object):
 
     def pos_update(self):
         self.pos =  random.randint(self.pos-2,self.pos+2)
+
+class MainAgent(object):
+    class MindModel(object):
+        def __init__(self):
+            pass
+        
+
+    def __init__(self):
+        pass

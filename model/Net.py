@@ -1,24 +1,10 @@
-import sys, os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)) + '/../')
 import numpy as np
-import matplotlib.pyplot as plt
-from environments import RPD
-from agent import RuleAgent
-from ga import SimpleGA
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 from torchvision import datasets, transforms
 
-sum = 0
-epi = 1
-N = 60
-for i in range(epi):
-    ga = SimpleGA(N)
-    val,pool = ga.evolve()
-    sum += val
-print(sum/epi)
 
 class SimpleNet(nn.Module):
     def __init__(self,input_size, output_size):
@@ -50,12 +36,12 @@ def train(model,dataset,optimizer):
         losses.append(loss)
     print(torch.tensor(losses).mean())
     
-look_list = [pool[j].look_gene for j in range(N)]
-character_list = [pool[i].character_val for i in range(N)]
+
+
 #学習データ（動作確認用）
-x = torch.tensor(look_list).float()
+x = torch.tensor(np.random.randn(100,7)).float()
 #教師データ（動作確認用）
-t = torch.tensor(character_list).float()
+t = torch.tensor(np.zeros_like(np.random.randn(100,1))).float()
 
 #pytorchで訓練するためにデータを変換
 dataset = train_excorder(x,t)
@@ -65,10 +51,7 @@ model = SimpleNet(7,2)
 optimizer = optim.SGD(model.parameters(), lr=0.01)
 
 #エポック数
-epochs=15
+epochs=10
 
 for epoch in range(epochs):
     train(model,dataset,optimizer)
-
-
-
